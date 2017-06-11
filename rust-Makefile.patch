@@ -1,0 +1,14 @@
+--- coreutils/Makefile.orig	2017-06-10 16:40:01.811249000 +0000
++++ coreutils/Makefile	2017-06-10 16:41:09.301061000 +0000
+@@ -304,10 +304,8 @@
+ 		cd $(INSTALLDIR_BIN) && ln -fs $(PROG_PREFIX)uutils $(PROG_PREFIX)$(prog);)
+ else
+ 	$(foreach prog, $(INSTALLEES), \
+-		$(INSTALL) $(PKG_BUILDDIR)/$(prog) $(INSTALLDIR_BIN)/$(PROG_PREFIX)$(prog);)
++		$(INSTALL) $(BUILDDIR)/$(prog) $(INSTALLDIR_BIN)/$(PROG_PREFIX)$(prog);)
+ endif
+-	mkdir -p $(INSTALLDIR_LIB)
+-	$(foreach lib, $(LIBS), $(INSTALL) $(BUILDDIR)/$(lib) $(INSTALLDIR_LIB)/$(lib);)
+ 
+ uninstall:
+ ifeq (${MULTICALL}, y)

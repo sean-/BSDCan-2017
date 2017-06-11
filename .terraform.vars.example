@@ -1,0 +1,31 @@
+# See https://www.terraform.io/docs/configuration/variables.html#variable-files
+#
+# Values used in this file are empty (or defaults).  Configure variables here.
+
+# ID from `make networks`, the network must be in the same data center as the
+# image.
+#network_id = "01234567-89ab-cdef-0123-456789abcdef"
+
+# Image ID from the output of the packer run, or `make my-images`
+#my_image_id = "deadbeef-c0ff-eede-adbe-efc0ffeebeef"
+
+# Package name from `make packages`
+#my_package_size = "k4-highcpu-kvm-250M"
+
+# Triton account information. Example:
+#
+# $ make env | grep ^SDC_ACCOUNT | cut -d '=' -f2
+#triton_account_name = "my-triton-account-name"
+
+# Key ID from `triton keys` that matches the file used in key_material. Example:
+#
+# $ make env | grep ^SDC_KEY_ID | cut -d '=' -f2
+#triton_key_id = "de:ad:be:ef:c0:ff:ee:de:ad:be:ef:c0:ff:ee:be:ef"
+
+# Path to your SSH key
+#triton_key_material = "~/.ssh/id_rsa"
+
+# URL from `triton datacenters`.  Example:
+#
+# $ make env | grep ^SDC_URL | cut -d '=' -f2
+#triton_url = "https://us-west-1.api.joyentcloud.com"

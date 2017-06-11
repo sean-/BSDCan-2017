@@ -1,0 +1,171 @@
+// This Packer Template requires JSON5 support in packer(1) or the cfgt(1)
+// utility.
+//
+// USAGE with unpatched packer: cfgt -i freebsd.json5 | packer build -
+// USAGE with patched packer: packer build freebsd.json5
+//
+// packer w/ JSON5 support: https://github.com/sean-/packer/tree/f-json5
+// cfgt: go get -u github.com/sean-/cfgt
+{
+    variables: {
+        // Environment variables pulled from `triton env` or `triton env $(PROFILE_NAME)`
+        triton_account: "{{ env `SDC_ACCOUNT` }}",
+        triton_key_id: "{{ env `SDC_KEY_ID` }}",
+        triton_key_material_path: "{{ env `SDC_KEY_MATERIAL_PATH` }}",
+        triton_url: "{{ env `SDC_URL` }}",
+        triton_image_name: "freebsd-userland-go",
+        triton_image_version: "1.0.0",
+    },
+
+    builders: [
+        {
+            type: "triton",
+
+            triton_url: "{{ user `triton_url` }}",
+            triton_account: "{{ user `triton_account` }}",
+            triton_key_id: "{{ user `triton_key_id` }}",
+            triton_key_material: "{{ user `triton_key_material_path` }}",
+
+            source_machine_name: "{{ user `triton_image_name` }}-builder",
+
+            // Value from the NAME column output from `make triton-packages`
+            source_machine_package: "k4-highcpu-kvm-750M",
+
+            // Value from the ID column output from `make triton-freebsd-images`
+            source_machine_image: "d6542cce-1815-11e7-92d7-cf2bd01fcadc",
+
+            // Value from the ID column output from `make triton-networks`
+            source_machine_networks: [
+                "42325ea0-eb62-44c1-8eb6-0af3e2f83abc",
+            ],
+
+            ssh_username: "root",
+            ssh_private_key_file: "{{ user `triton_key_material_path` }}",
+
+            image_name: "{{ user `triton_image_name` }}",
+            image_version: "{{ user `triton_image_version` }}",
+        },
+    ],
+
+    provisioners: [
+        { // Clean up the base FreeBSD image
+            type: "shell",
+            inline: [
+                // Log the version of the builder image
+                "/usr/bin/uname -a",
+
+                // Enable async IO for provisioning
+                "/sbin/mount -u -o async,noatime /",
+
+                // Remove all packages
+                "/usr/bin/env ASSUME_ALWAYS_YES=yes /usr/local/sbin/pkg-static remove -a -f",
+
+                // Update via freebsd-update(1)
+                "/usr/sbin/freebsd-update --not-running-from-cron fetch",
+                "/usr/sbin/freebsd-update install || /usr/bin/true",
+                "/bin/date '+0 %k * * * root /usr/sbin/freebsd-update cron' | /usr/bin/tee -a /etc/crontab",
+
+                // Shoot sendmail(8)
+                "/usr/sbin/sysrc sendmail_enable=NONE",
+                "/usr/sbin/service sendmail onestop",
+
+                // Re-bootstrap pkg(1)
+                "/usr/bin/env ASSUME_ALWAYS_YES=yes /usr/sbin/pkg bootstrap -N",
+
+                // Update and install package auditing
+                "/usr/local/sbin/pkg-static update -f",  // Update the FreeBSD package database
+                "/usr/local/sbin/pkg-static upgrade -y", // Update any out of date packages
+                "/usr/local/sbin/pkg-static audit -F",   // Install vulnerability database
+
+                // Mandatory packages for triton
+                "/usr/local/sbin/pkg-static install -y shells/bash",
+
+                // Mandatory packages for administration
+                "/usr/local/sbin/pkg-static install -y net/mosh net/openntpd sysutils/runit sysutils/tmux",
+
+                // OpenNTPd configuration
+                "/usr/bin/sed -i.bak -e 's%^servers.*%#servers pool.ntp.org%' /usr/local/etc/ntpd.conf",
+                "/usr/bin/printf 'server 0.freebsd.pool.ntp.org\nserver 1.freebsd.pool.ntp.org\nserver 2.freebsd.pool.ntp.org\nserver 3.freebsd.pool.ntp.org\n' | /usr/bin/tee -a /usr/local/etc/ntpd.conf",
+                "/usr/sbin/service ntpd stop",
+                "/usr/sbin/sysrc ntpd_enable=NO",
+                "/usr/sbin/sysrc openntpd_enable=YES",
+                "/usr/sbin/service openntpd start",
+
+                "/usr/sbin/sysrc clear_tmp_enable=YES",
+
+                "/usr/sbin/pw groupadd _log -g 899",
+                "/usr/sbin/pw useradd _log -u 899 -g _log",
+                "/usr/sbin/sysrc runsvdir_enable=YES",
+                "/usr/sbin/sysrc runsvdir_path=/var/service",
+            ],
+        },
+
+        { // Install Go userland utilities
+            type: "shell",
+            inline: [
+                // Log the version of the builder image
+                "/usr/local/sbin/pkg-static install -y devel/git lang/go",
+                "/usr/bin/env GOPATH=/root/go /usr/local/bin/go get github.com/aisola/go-coreutils/...",
+
+                // Install new /bin
+                "/bin/echo \
+                     cat   \
+                     date  \
+                     echo  \
+                     expr  \
+                     mkdir \
+                     mv    \
+                     pwd   \
+                     rm    \
+                     rmdir \
+                     sleep \
+                     sync  \
+                 | /usr/bin/xargs -n1 -I% \
+                     /usr/bin/install -b -B .base -S -v /root/go/bin/% /bin",
+
+                // Install new /sbin
+                "/bin/echo \
+                     md5sum  \
+                     sha1sum \
+                     sha224sum \
+                     sha256sum \
+                     sha384sum \
+                     sha512sum \
+                 | /usr/bin/sed -e 's/sum//g' \
+                 | /usr/bin/xargs -n1 -I% \
+                     /usr/bin/install -b -B .base -S -v /root/go/bin/%sum /sbin/%",
+
+                // Install new /usr/bin
+                "/bin/echo    \
+                     basename \
+                     dirname  \
+                     env      \
+                     factor   \
+                     false    \
+                     groups   \
+                     head     \
+                     logname  \
+                     tail     \
+                     tee      \
+                     touch    \
+                     true     \
+                     tsort    \
+                     wc       \
+                     whoami   \
+                     yes      \
+                 | /usr/bin/xargs -n1 -I% \
+                     /usr/bin/install -b -B .base -S -v /root/go/bin/% /usr/bin",
+
+                "/usr/bin/env ASSUME_ALWAYS_YES=yes /usr/local/sbin/pkg-static remove devel/git lang/go",
+            ],
+        },
+
+        { // Finishing touches on the install
+            type: "shell",
+            inline: [
+                "/etc/periodic/weekly/310.locate || /usr/bin/true",
+                "/bin/echo 'weekly_locate_enable=\"NO\"' >> /etc/periodic.conf",
+            ],
+        },
+    ],
+}

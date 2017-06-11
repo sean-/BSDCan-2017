@@ -1,0 +1,10 @@
+*.json
+.terraform.plan
+.terraform.state
+.terraform.state.backup
+.terraform.vars
+.Python
+bin/
+include/
+lib/
+*.pdf
